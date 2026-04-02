@@ -1,6 +1,7 @@
 # src/ingestion.py
 
-from gitingest import ingest
+import asyncio
+from gitingest import ingest_async
 from dataclasses import dataclass
 
 
@@ -31,21 +32,32 @@ class GitHubIngestor:
         """
         Args:
             repo_url: The full GitHub repository URL.
-                      Example: "https://github.com/user/repo"
         """
         self.repo_url = repo_url
-        self._result = None  # will be filled after fetch() is called
+        self._result = None
 
     def fetch(self) -> IngestionResult:
         """
         Fetches the repository and returns an IngestionResult.
-        Raises a ValueError if the URL is empty or invalid.
-        Raises a RuntimeError if GitIngest fails to fetch the repo.
+        Uses asyncio to handle gitingest's async internals
+        safely inside Streamlit's environment.
         """
         self._validate_url()
+        print(f"DEBUG — cleaned URL: '{self.repo_url}'")
 
         try:
-            summary, tree, content = ingest(self.repo_url)
+            # gitingest uses async internally — we run it safely
+            # by creating a fresh event loop ourselves
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                summary, tree, content = loop.run_until_complete(
+                    ingest_async(self.repo_url)
+                )
+            finally:
+                loop.close()
+
             self._result = IngestionResult(
                 summary=summary,
                 tree=tree,
@@ -56,14 +68,13 @@ class GitHubIngestor:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to ingest repository '{self.repo_url}'.\n"
-                f"Reason: {str(e)}"
+                f"Reason: {type(e).__name__}: {str(e)}"
             )
 
     def get_result(self) -> IngestionResult:
         """
         Returns the last fetched result without re-fetching.
-        Useful if you need to access the result again later.
-        Raises a RuntimeError if fetch() hasn't been called yet.
+        Raises RuntimeError if fetch() hasn't been called yet.
         """
         if self._result is None:
             raise RuntimeError(
@@ -73,10 +84,10 @@ class GitHubIngestor:
 
     def _validate_url(self):
         """
-        Private method — cleans and validates the URL before
-        making any network calls.
+        Private — cleans and validates the URL before any
+        network calls.
         """
-        # Strip whitespace and common markdown formatting characters
+        # Strip whitespace and markdown formatting characters
         self.repo_url = self.repo_url.strip().strip("_").strip("*").strip()
 
         if not self.repo_url:
