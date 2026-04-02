@@ -1,0 +1,16 @@
+# main.py
+
+from src.ui import ChatUI
+
+
+def main():
+    """
+    Entry point for the GitHub RAG application.
+    Creates the UI and runs it — nothing more.
+    """
+    ui = ChatUI()
+    ui.run()
+
+
+if __name__ == "__main__":
+    main()
