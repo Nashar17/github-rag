@@ -73,11 +73,13 @@ class GitHubIngestor:
 
     def _validate_url(self):
         """
-        Private method — validates the URL before making any
-        network calls. The underscore prefix (_) signals to other
-        developers: 'don't call this from outside the class'.
+        Private method — cleans and validates the URL before
+        making any network calls.
         """
-        if not self.repo_url or not self.repo_url.strip():
+        # Strip whitespace and common markdown formatting characters
+        self.repo_url = self.repo_url.strip().strip("_").strip("*").strip()
+
+        if not self.repo_url:
             raise ValueError("Repository URL cannot be empty.")
 
         if "github.com" not in self.repo_url:
