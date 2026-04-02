@@ -39,15 +39,21 @@ class GitHubIngestor:
     def fetch(self) -> IngestionResult:
         """
         Fetches the repository and returns an IngestionResult.
-        Uses asyncio to handle gitingest's async internals
-        safely inside Streamlit's environment.
+        Uses asyncio with SelectorEventLoop to handle Windows +
+        Python 3.13 compatibility inside Streamlit.
         """
         self._validate_url()
         print(f"DEBUG — cleaned URL: '{self.repo_url}'")
 
         try:
-            # gitingest uses async internally — we run it safely
-            # by creating a fresh event loop ourselves
+            # Windows + Python 3.13 fix:
+            # Force SelectorEventLoop — the default ProactorEventLoop
+            # on Windows causes NotImplementedError in this context
+            if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+                asyncio.set_event_loop_policy(
+                    asyncio.WindowsSelectorEventLoopPolicy()
+                )
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -55,6 +61,7 @@ class GitHubIngestor:
                 summary, tree, content = loop.run_until_complete(
                     ingest_async(self.repo_url)
                 )
+            
             finally:
                 loop.close()
 
