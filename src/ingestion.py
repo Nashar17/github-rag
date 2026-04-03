@@ -1,16 +1,15 @@
 # src/ingestion.py
 
-import asyncio
-from gitingest import ingest_async
+import concurrent.futures
 from dataclasses import dataclass
+from gitingest import ingest
 
 
 @dataclass
 class IngestionResult:
     """
     A simple container that holds the 3 things
-    GitIngest returns. Using a dataclass means we get
-    a clean object instead of juggling 3 loose variables.
+    GitIngest returns.
     """
     summary: str
     tree: str
@@ -22,6 +21,9 @@ class GitHubIngestor:
     Responsible for fetching and parsing a GitHub repository
     into raw text using GitIngest.
 
+    Runs GitIngest in a separate thread to avoid conflicts
+    with Streamlit's event loop on Windows.
+
     Usage:
         ingestor = GitHubIngestor("https://github.com/user/repo")
         result = ingestor.fetch()
@@ -29,41 +31,24 @@ class GitHubIngestor:
     """
 
     def __init__(self, repo_url: str):
-        """
-        Args:
-            repo_url: The full GitHub repository URL.
-        """
         self.repo_url = repo_url
         self._result = None
 
     def fetch(self) -> IngestionResult:
         """
-        Fetches the repository and returns an IngestionResult.
-        Uses asyncio with SelectorEventLoop to handle Windows +
-        Python 3.13 compatibility inside Streamlit.
+        Fetches the repository by running GitIngest in a
+        separate thread — completely isolated from Streamlit's
+        event loop.
         """
         self._validate_url()
-        print(f"DEBUG — cleaned URL: '{self.repo_url}'")
+        print(f"DEBUG — fetching: '{self.repo_url}'")
 
         try:
-            # Windows + Python 3.13 fix:
-            # Force SelectorEventLoop — the default ProactorEventLoop
-            # on Windows causes NotImplementedError in this context
-            if hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
-                asyncio.set_event_loop_policy(
-                    asyncio.WindowsSelectorEventLoopPolicy()
-                )
-
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                summary, tree, content = loop.run_until_complete(
-                    ingest_async(self.repo_url)
-                )
-            
-            finally:
-                loop.close()
+            # Run ingest() in its own thread so it creates
+            # its own clean event loop, isolated from Streamlit
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(ingest, self.repo_url)
+                summary, tree, content = future.result(timeout=120)
 
             self._result = IngestionResult(
                 summary=summary,
@@ -72,6 +57,11 @@ class GitHubIngestor:
             )
             return self._result
 
+        except concurrent.futures.TimeoutError:
+            raise RuntimeError(
+                "Ingestion timed out after 120 seconds. "
+                "The repository may be too large. Try a smaller repo."
+            )
         except Exception as e:
             raise RuntimeError(
                 f"Failed to ingest repository '{self.repo_url}'.\n"
@@ -79,22 +69,13 @@ class GitHubIngestor:
             )
 
     def get_result(self) -> IngestionResult:
-        """
-        Returns the last fetched result without re-fetching.
-        Raises RuntimeError if fetch() hasn't been called yet.
-        """
+        """Returns last fetched result without re-fetching."""
         if self._result is None:
-            raise RuntimeError(
-                "No result available. Call fetch() first."
-            )
+            raise RuntimeError("No result available. Call fetch() first.")
         return self._result
 
     def _validate_url(self):
-        """
-        Private — cleans and validates the URL before any
-        network calls.
-        """
-        # Strip whitespace and markdown formatting characters
+        """Cleans and validates the URL."""
         self.repo_url = self.repo_url.strip().strip("_").strip("*").strip()
 
         if not self.repo_url:
@@ -102,6 +83,5 @@ class GitHubIngestor:
 
         if "github.com" not in self.repo_url:
             raise ValueError(
-                f"'{self.repo_url}' does not look like a GitHub URL. "
-                "Please provide a URL containing 'github.com'."
+                f"'{self.repo_url}' does not look like a GitHub URL."
             )
