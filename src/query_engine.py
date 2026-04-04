@@ -1,6 +1,6 @@
 # src/query_engine.py
 
-from llama_index.core import VectorStoreIndex
+from llama_index.core import PromptTemplate, VectorStoreIndex
 from llama_index.core.query_engine import BaseQueryEngine
 
 from config.settings import Settings
@@ -39,14 +39,31 @@ class RAGQueryEngine:
 
     def _build_engine(self) -> BaseQueryEngine:
         """
-        Creates the LlamaIndex query engine from the index.
-
-        similarity_top_k controls how many chunks are retrieved
-        and passed as context to the LLM for each question.
+        Creates the LlamaIndex query engine with a custom prompt
+        that tells the LLM to answer strictly from the repo content.
         """
-        return self._index.as_query_engine(
+        from llama_index.core import PromptTemplate
+
+        qa_prompt = PromptTemplate(
+            "You are a helpful assistant that answers questions about "
+            "a GitHub repository.\n\n"
+            "Use ONLY the following context from the repository to answer. "
+            "If the answer is not in the context, say "
+            "'I could not find that information in this repository.'\n\n"
+            "Context:\n"
+            "---------------------\n"
+            "{context_str}\n"
+            "---------------------\n\n"
+            "Question: {query_str}\n\n"
+            "Answer: "
+        )
+
+        engine = self._index.as_query_engine(
             similarity_top_k=Settings.SIMILARITY_TOP_K
         )
+        engine.update_prompts({"response_synthesizer:text_qa_template": qa_prompt})
+        return engine
+
 
     def ask(self, question: str) -> str:
         """

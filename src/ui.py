@@ -111,11 +111,18 @@ class ChatUI:
         Args:
             repo_url: The GitHub repository URL to ingest.
         """
+
+        # Clean the URL here in the UI layer as well
+        repo_url = repo_url.strip().strip("_").strip("*").strip()
+        print(f"UI — cleaned URL: '{repo_url}'")
+
         with st.spinner("⏳ Fetching repository... this may take a moment."):
             try:
                 # Step 1: Ingest
+                print(f"UI — about to call fetch() for: {repo_url}")
                 ingestor = GitHubIngestor(repo_url)
                 result = ingestor.fetch()
+                print(f"DEBUG — content preview: {result.content[:500]}")
 
             except (ValueError, RuntimeError) as e:
                 st.error(f"❌ Ingestion failed: {str(e)}")
