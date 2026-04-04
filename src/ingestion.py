@@ -99,7 +99,7 @@ class GitHubIngestor:
             ],
             check=True,             # raises CalledProcessError if git fails
             capture_output=True,    # captures stdout/stderr
-            text=True  
+            text=True,  
             encoding="utf-8",    
             errors="ignore"              
         )
