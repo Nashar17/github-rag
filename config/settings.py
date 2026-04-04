@@ -9,7 +9,7 @@ class Settings:
 
     # ── Ollama LLM ──────────────────────────────────────────
     # The model used to ANSWER your questions
-    LLM_MODEL = "llama3.2"
+    LLM_MODEL = "llama3.2:1b"
 
     # How long to wait for Ollama to respond (in seconds)
     # Large repos may need more time
