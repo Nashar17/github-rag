@@ -34,7 +34,7 @@ pip install -r requirements.txt
 
 **2. Make sure Ollama is running with required models**
 ```bash
-ollama pull llama3.2
+ollama pull llama3.2:1b
 ollama pull nomic-embed-text
 ```
 
